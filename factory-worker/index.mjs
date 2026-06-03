@@ -1,4 +1,4 @@
-import http from "node:http";
+﻿import http from "node:http";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import net from "node:net";
@@ -499,12 +499,26 @@ async function getDatabaseHealth() {
 
 async function addLog(level, message, extra = {}) {
   const logs = await readJson(LOG_FILE, []);
+  const mission = extra.missionLog && typeof extra.missionLog === "object" ? extra.missionLog : {};
   const log = {
     id: crypto.randomUUID(),
     createdAt: nowIso(),
     level,
     message,
     ...extra,
+    missionName: mission.missionName || extra.missionName || null,
+    projectName: mission.projectName || extra.projectName || null,
+    repository: mission.repository || extra.repository || extra.repositoryUrl || null,
+    status: mission.status || extra.status || null,
+    action: mission.action || extra.action || extra.requestedAction || null,
+    result: mission.result || extra.resultSummary || null,
+    commit: mission.commit || extra.commit || null,
+    push: mission.push || extra.push || null,
+    blocker: mission.blocker || extra.blocker || null,
+    reportId: mission.reportId || extra.reportId || null,
+    reportUrl: mission.reportUrl || extra.reportUrl || null,
+    summary: mission.summary || extra.summary || null,
+    isMissionLog: Boolean(extra.isMissionLog || mission.missionName || mission.reportUrl),
   };
   logs.unshift(log);
   await writeJson(LOG_FILE, logs.slice(0, 1500));
@@ -627,7 +641,7 @@ function buildMissionReport(task, { status, result = null, error = null } = {}) 
     id: crypto.randomUUID(),
     taskId: task?.id || null,
     createdAt: nowIso(),
-    title: "RELATÓRIO FINAL DA MISSÃO",
+    title: "RELATORIO FINAL DA MISSAO",
     status: status || normalizeTaskStatus(task?.status),
     project: task?.projectName || task?.projectId || payload.projectName || "nao informado",
     repository:
@@ -684,13 +698,13 @@ function numberedList(items = []) {
 }
 
 function formatMissionReportText(report) {
-  return `RELATÓRIO FINAL DA MISSÃO
+  return `RELATORIO FINAL DA MISSAO
 
 Status:
 ${report.status}
 Projeto:
 ${report.project}
-Repositório:
+Repositorio:
 ${report.repository}
 Branch:
 ${report.branch}
@@ -713,10 +727,10 @@ ${numberedList(report.bloqueios)}
 Arquivos alterados:
 ${numberedList(report.arquivos_alterados)}
 
-Próximos passos:
+Proximos passos:
 ${numberedList(report.proximos_passos)}
 
-Observações:
+Observacoes:
 ${numberedList(report.observacoes)}`;
 }
 
@@ -730,6 +744,8 @@ async function saveMissionReport(report) {
     reportId: report.id,
     codex_status: report.codex_status,
     status: report.status,
+    isMissionLog: true,
+    missionLog: buildReportMissionLog(report, "Relatorio completo criado"),
   });
   if (supabase) {
     await Promise.allSettled([
@@ -764,7 +780,7 @@ async function createInternalNotification(report) {
     taskId: report.taskId,
     createdAt: nowIso(),
     read: false,
-    title: "AI Factory - Missão Finalizada",
+    title: "AI Factory - Missao Finalizada",
     project: report.project,
     status: report.status,
     summary: reportSummary(report),
@@ -772,7 +788,7 @@ async function createInternalNotification(report) {
   };
   list.unshift(notification);
   await writeJson(NOTIFICATIONS_FILE, list.slice(0, 500));
-  await addLog("info", "Notificação interna criada", {
+  await addLog("info", "Notificacao interna criada", {
     notificationId: notification.id,
     reportId: report.id,
     taskId: report.taskId,
@@ -798,10 +814,10 @@ ${report.commit}
 Bloqueios:
 ${blockers}
 
-Próximo passo:
+Proximo passo:
 ${nextStep}
 
-Relatório completo:
+Relatorio completo:
 ${report.reportUrl}`;
 }
 
@@ -885,7 +901,7 @@ async function sendSmtpMail({ to, from, subject, text }) {
 async function sendEmailNotification(report) {
   const notify = getExternalNotifyStatus();
   if (!notify.enabled) {
-    await addLog("warn", "Notificação externa por e-mail não configurada.", {
+    await addLog("warn", "Notificacao externa por e-mail nao configurada.", {
       taskId: report.taskId,
       reportId: report.id,
       missing: notify.missing,
@@ -893,7 +909,7 @@ async function sendEmailNotification(report) {
     return { enabled: false, channel: "email", sent: false, missing: notify.missing };
   }
 
-  const subject = "AI Factory - Missão Finalizada";
+  const subject = "AI Factory - Missao Finalizada";
   const text = formatEmailNotification(report);
   try {
     await sendSmtpMail({
@@ -902,14 +918,14 @@ async function sendEmailNotification(report) {
       subject,
       text,
     });
-    await addLog("ok", "E-mail de notificação externa enviado", {
+    await addLog("ok", "E-mail de notificacao externa enviado", {
       taskId: report.taskId,
       reportId: report.id,
       to: env.emailNotifyTo,
     });
     return { enabled: true, channel: "email", sent: true, to: env.emailNotifyTo };
   } catch (error) {
-    await addLog("error", "Falha ao enviar e-mail de notificação externa", {
+    await addLog("error", "Falha ao enviar e-mail de notificacao externa", {
       taskId: report.taskId,
       reportId: report.id,
       error: String(error),
@@ -920,6 +936,51 @@ async function sendEmailNotification(report) {
 
 async function sendExternalNotification(report) {
   return sendEmailNotification(report);
+}
+
+function firstUseful(items = [], fallback = "nao informado") {
+  const list = Array.isArray(items) ? items : [items];
+  const value = list.map((item) => String(item || "").trim()).find(Boolean);
+  return value || fallback;
+}
+
+function buildTaskMissionLog(task = {}, { status = "", action = "Missao em execucao", result = "" } = {}) {
+  const payload = task?.payload && typeof task.payload === "object" ? task.payload : {};
+  return {
+    missionName: task?.title || task?.command || task?.type || "Missao sem titulo",
+    projectName: task?.projectName || task?.projectId || payload.projectName || "AI Factory",
+    repository:
+      task?.repository ||
+      task?.repositoryUrl ||
+      payload.repository ||
+      payload.repositoryUrl ||
+      env.githubRepo ||
+      "nao informado",
+    status: status || normalizeTaskStatus(task?.status),
+    action,
+    result,
+    commit: task?.commit || payload.commit || "nao",
+    push: task?.push ?? payload.push ?? "nao",
+    blocker: payload.blocker || firstUseful(payload.blockers, "nenhum"),
+    summary: result || task?.command || task?.title || "missao registrada",
+  };
+}
+
+function buildReportMissionLog(report = {}, action = "Missao concluida") {
+  return {
+    missionName: report.mission || "Missao sem titulo",
+    projectName: report.project || "AI Factory",
+    repository: report.repository || "nao informado",
+    status: report.status || "unknown",
+    action,
+    result: firstUseful(report.feito, "nao informado"),
+    commit: report.commit || firstUseful(report.commits, "nao"),
+    push: report.push || "nao",
+    blocker: firstUseful(report.bloqueios, "nenhum"),
+    reportId: report.id || null,
+    reportUrl: report.reportUrl || null,
+    summary: reportSummary(report),
+  };
 }
 
 function escapePdfText(value = "") {
@@ -3228,10 +3289,16 @@ async function processNext() {
       },
     });
 
-    await addLog("info", "Processamento iniciado", {
+    await addLog("info", "Missao iniciada", {
       taskId: task.id,
       type: task.type,
       projectName: task.projectName,
+      isMissionLog: true,
+      missionLog: buildTaskMissionLog(task, {
+        status: "running",
+        action: "Missao iniciada",
+        result: "worker assumiu a missao e iniciou a execucao",
+      }),
     });
 
     const result = await executeTask(task);
@@ -3250,13 +3317,18 @@ async function processNext() {
     await saveFinalReport(report);
     await sendExternalNotification(report);
 
-    await addLog("ok", "Tarefa concluida", {
+    await addLog("ok", `Missao concluida - ${report.project}`, {
       taskId: task.id,
       type: task.type,
       projectName: task.projectName,
+      reportId: report.id,
+      reportUrl: report.reportUrl,
+      isMissionLog: true,
+      missionLog: buildReportMissionLog(report, "Missao concluida"),
     });
   } catch (error) {
     const message = String(error);
+    let failedReport = null;
     if (task?.id) {
       await updateTaskStatus(task.id, {
         status: "failed",
@@ -3270,11 +3342,24 @@ async function processNext() {
       });
       await saveFinalReport(report);
       await sendExternalNotification(report);
+      failedReport = report;
     }
-    await addLog("error", "Falha no processamento", {
+    await addLog("error", task ? `Missao com erro - ${task.projectName || task.projectId || "AI Factory"}` : "Missao com erro", {
       error: message,
       taskId: task?.id || null,
       taskType: task?.type || null,
+      reportId: failedReport?.id || null,
+      reportUrl: failedReport?.reportUrl || null,
+      isMissionLog: Boolean(task),
+      missionLog: task
+        ? failedReport
+          ? buildReportMissionLog(failedReport, "Missao com erro")
+          : buildTaskMissionLog(task, {
+              status: "failed",
+              action: "Missao com erro",
+              result: "execucao interrompida por erro",
+            })
+        : undefined,
     });
   } finally {
     processing = false;
@@ -3422,13 +3507,19 @@ const server = http.createServer(async (req, res) => {
       rejection_reason: body.reason ? String(body.reason) : "rejeitado manualmente",
     });
     if (!updatedTask) return json(res, 404, { error: "tarefa nao encontrada" });
-    await addLog("warn", "Tarefa rejeitada manualmente", { taskId });
     const report = buildMissionReport(updatedTask, {
       status: "rejected",
       error: updatedTask.rejection_reason || "rejeitado manualmente",
     });
     await saveFinalReport(report);
     await sendExternalNotification(report);
+    await addLog("warn", `Missao bloqueada - ${report.project}`, {
+      taskId,
+      reportId: report.id,
+      reportUrl: report.reportUrl,
+      isMissionLog: true,
+      missionLog: buildReportMissionLog(report, "Missao bloqueada"),
+    });
     return json(res, 200, updatedTask);
   }
 
@@ -3442,13 +3533,19 @@ const server = http.createServer(async (req, res) => {
       live_execution: null,
     });
     if (!updatedTask) return json(res, 404, { error: "tarefa nao encontrada" });
-    await addLog("warn", "Tarefa cancelada manualmente", { taskId });
     const report = buildMissionReport(updatedTask, {
       status: "cancelled",
       error: updatedTask.cancellation_reason || "cancelado manualmente",
     });
     await saveFinalReport(report);
     await sendExternalNotification(report);
+    await addLog("warn", `Missao bloqueada - ${report.project}`, {
+      taskId,
+      reportId: report.id,
+      reportUrl: report.reportUrl,
+      isMissionLog: true,
+      missionLog: buildReportMissionLog(report, "Missao bloqueada"),
+    });
     return json(res, 200, updatedTask);
   }
 

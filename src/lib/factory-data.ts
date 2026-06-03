@@ -25,6 +25,18 @@ export interface SmartLog {
   id: string;
   projectId: string | null;
   projectName?: string;
+  missionName?: string | null;
+  repository?: string | null;
+  status?: string | null;
+  action?: string | null;
+  result?: string | null;
+  commit?: string | null;
+  push?: string | boolean | null;
+  blocker?: string | null;
+  reportId?: string | null;
+  reportUrl?: string | null;
+  summary?: string | null;
+  isMissionLog?: boolean;
   module?: string;
   type: "system" | "monitor" | "forge" | "doctor" | "connect" | "voice";
   level: "info" | "ok" | "warn" | "error";
@@ -110,48 +122,267 @@ const bool = (v: unknown) => v === true || v === "true";
 // ---------- Mock seed ----------
 
 const seedProjects: Project[] = [
-  { id: "topac", name: "TOPAC RH", category: "Recursos Humanos", status: "online", progress: 92, source: "mock", isPrivate: false, isExternal: false, lastUpdate: now(), description: "Plataforma operacional de RH" },
-  { id: "nexus", name: "Nexus Lead", category: "Comercial", status: "online", progress: 78, source: "mock", isPrivate: false, isExternal: false, lastUpdate: now(), description: "Geração e qualificação de leads com IA" },
-  { id: "doctor", name: "Doctor PRO", category: "Diagnóstico", status: "build", progress: 64, source: "mock", isPrivate: false, isExternal: false, lastUpdate: now(), description: "Diagnóstico e correção autônoma" },
-  { id: "forge", name: "Forge", category: "Engenharia", status: "online", progress: 88, source: "mock", isPrivate: false, isExternal: false, lastUpdate: now(), description: "Fábrica de sistemas e módulos" },
-  { id: "pulzr", name: "PULZR", category: "Monitoramento", status: "alert", progress: 41, source: "mock", isPrivate: false, isExternal: true, lastUpdate: now(), description: "Pulso operacional em tempo real" },
-  { id: "flow", name: "Flow", category: "Automação", status: "online", progress: 71, source: "mock", isPrivate: false, isExternal: false, lastUpdate: now(), description: "Orquestração de fluxos inteligentes" },
+  {
+    id: "topac",
+    name: "TOPAC RH",
+    category: "Recursos Humanos",
+    status: "online",
+    progress: 92,
+    source: "mock",
+    isPrivate: false,
+    isExternal: false,
+    lastUpdate: now(),
+    description: "Plataforma operacional de RH",
+  },
+  {
+    id: "nexus",
+    name: "Nexus Lead",
+    category: "Comercial",
+    status: "online",
+    progress: 78,
+    source: "mock",
+    isPrivate: false,
+    isExternal: false,
+    lastUpdate: now(),
+    description: "Geração e qualificação de leads com IA",
+  },
+  {
+    id: "doctor",
+    name: "Doctor PRO",
+    category: "Diagnóstico",
+    status: "build",
+    progress: 64,
+    source: "mock",
+    isPrivate: false,
+    isExternal: false,
+    lastUpdate: now(),
+    description: "Diagnóstico e correção autônoma",
+  },
+  {
+    id: "forge",
+    name: "Forge",
+    category: "Engenharia",
+    status: "online",
+    progress: 88,
+    source: "mock",
+    isPrivate: false,
+    isExternal: false,
+    lastUpdate: now(),
+    description: "Fábrica de sistemas e módulos",
+  },
+  {
+    id: "pulzr",
+    name: "PULZR",
+    category: "Monitoramento",
+    status: "alert",
+    progress: 41,
+    source: "mock",
+    isPrivate: false,
+    isExternal: true,
+    lastUpdate: now(),
+    description: "Pulso operacional em tempo real",
+  },
+  {
+    id: "flow",
+    name: "Flow",
+    category: "Automação",
+    status: "online",
+    progress: 71,
+    source: "mock",
+    isPrivate: false,
+    isExternal: false,
+    lastUpdate: now(),
+    description: "Orquestração de fluxos inteligentes",
+  },
 ];
 
 const seedLogs: SmartLog[] = [
-  { id: uid(), projectId: "topac", type: "connect", level: "info", message: "Projeto TOPAC RH conectado ao núcleo IA", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "nexus", type: "doctor", level: "ok", message: "Correção aplicada em Nexus Lead · módulo dashboard", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: null, type: "connect", level: "info", message: "API WhatsApp sincronizada · 1.2k eventos", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "doctor", type: "monitor", level: "ok", message: "Monitoramento ativo · Doctor PRO", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "pulzr", type: "monitor", level: "warn", message: "Alerta detectado · latência elevada em PULZR", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: null, type: "forge", level: "info", message: "Forge gerou nova arquitetura · módulo financeiro", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "flow", type: "doctor", level: "ok", message: "Patch automático aplicado em Flow", createdAt: now(), source: "mock" },
+  {
+    id: uid(),
+    projectId: "topac",
+    type: "connect",
+    level: "info",
+    message: "Projeto TOPAC RH conectado ao núcleo IA",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "nexus",
+    type: "doctor",
+    level: "ok",
+    message: "Correção aplicada em Nexus Lead · módulo dashboard",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: null,
+    type: "connect",
+    level: "info",
+    message: "API WhatsApp sincronizada · 1.2k eventos",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "doctor",
+    type: "monitor",
+    level: "ok",
+    message: "Monitoramento ativo · Doctor PRO",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "pulzr",
+    type: "monitor",
+    level: "warn",
+    message: "Alerta detectado · latência elevada em PULZR",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: null,
+    type: "forge",
+    level: "info",
+    message: "Forge gerou nova arquitetura · módulo financeiro",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "flow",
+    type: "doctor",
+    level: "ok",
+    message: "Patch automático aplicado em Flow",
+    createdAt: now(),
+    source: "mock",
+  },
 ];
 
 const seedIntegrations: Integration[] = [
-  { id: uid(), name: "GitHub", provider: "github", status: "connected", lastSync: now(), errorMessage: null, source: "mock" },
-  { id: uid(), name: "Lovable", provider: "lovable", status: "connected", lastSync: now(), errorMessage: null, source: "mock" },
-  { id: uid(), name: "Supabase", provider: "supabase", status: "syncing", lastSync: now(), errorMessage: null, source: "mock" },
-  { id: uid(), name: "WhatsApp", provider: "meta", status: "connected", lastSync: now(), errorMessage: null, source: "mock" },
-  { id: uid(), name: "Google Drive", provider: "google", status: "warning", lastSync: now(), errorMessage: "Permissão a renovar em 3 dias", source: "mock" },
-  { id: uid(), name: "Stripe", provider: "stripe", status: "offline", lastSync: now(), errorMessage: "Aguardando reconexão manual", source: "mock" },
+  {
+    id: uid(),
+    name: "GitHub",
+    provider: "github",
+    status: "connected",
+    lastSync: now(),
+    errorMessage: null,
+    source: "mock",
+  },
+  {
+    id: uid(),
+    name: "Lovable",
+    provider: "lovable",
+    status: "connected",
+    lastSync: now(),
+    errorMessage: null,
+    source: "mock",
+  },
+  {
+    id: uid(),
+    name: "Supabase",
+    provider: "supabase",
+    status: "syncing",
+    lastSync: now(),
+    errorMessage: null,
+    source: "mock",
+  },
+  {
+    id: uid(),
+    name: "WhatsApp",
+    provider: "meta",
+    status: "connected",
+    lastSync: now(),
+    errorMessage: null,
+    source: "mock",
+  },
+  {
+    id: uid(),
+    name: "Google Drive",
+    provider: "google",
+    status: "warning",
+    lastSync: now(),
+    errorMessage: "Permissão a renovar em 3 dias",
+    source: "mock",
+  },
+  {
+    id: uid(),
+    name: "Stripe",
+    provider: "stripe",
+    status: "offline",
+    lastSync: now(),
+    errorMessage: "Aguardando reconexão manual",
+    source: "mock",
+  },
 ];
 
 const seedAlerts: Alert[] = [
-  { id: uid(), projectId: "pulzr", severity: "critical", title: "Latência elevada", description: "Endpoint /metrics > 1.5s", status: "open", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "nexus", severity: "medium", title: "Cache desatualizado", description: "Invalidação sugerida", status: "open", createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "flow", severity: "medium", title: "Job atrasado", description: "Fila assíncrona +12s", status: "ack", createdAt: now(), source: "mock" },
+  {
+    id: uid(),
+    projectId: "pulzr",
+    severity: "critical",
+    title: "Latência elevada",
+    description: "Endpoint /metrics > 1.5s",
+    status: "open",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "nexus",
+    severity: "medium",
+    title: "Cache desatualizado",
+    description: "Invalidação sugerida",
+    status: "open",
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "flow",
+    severity: "medium",
+    title: "Job atrasado",
+    description: "Fila assíncrona +12s",
+    status: "ack",
+    createdAt: now(),
+    source: "mock",
+  },
 ];
 
 const seedCorrections: Correction[] = [
-  { id: uid(), projectId: "nexus", title: "Otimizar query do dashboard", description: "Adicionar índice composto", status: "applied", riskLevel: "low", requiresApproval: false, createdAt: now(), source: "mock" },
-  { id: uid(), projectId: "pulzr", title: "Reiniciar worker de métricas", description: "Worker travado em loop", status: "suggested", riskLevel: "medium", requiresApproval: true, createdAt: now(), source: "mock" },
+  {
+    id: uid(),
+    projectId: "nexus",
+    title: "Otimizar query do dashboard",
+    description: "Adicionar índice composto",
+    status: "applied",
+    riskLevel: "low",
+    requiresApproval: false,
+    createdAt: now(),
+    source: "mock",
+  },
+  {
+    id: uid(),
+    projectId: "pulzr",
+    title: "Reiniciar worker de métricas",
+    description: "Worker travado em loop",
+    status: "suggested",
+    riskLevel: "medium",
+    requiresApproval: true,
+    createdAt: now(),
+    source: "mock",
+  },
 ];
 
 // ---------- normalizers ----------
 
 function normalizeProject(r: any): Project {
-  const status = (["online", "build", "alert", "offline"].includes(r?.status) ? r.status : "online") as ProjectStatus;
+  const status = (
+    ["online", "build", "alert", "offline"].includes(r?.status) ? r.status : "online"
+  ) as ProjectStatus;
   return {
     id: str(r?.id ?? r?.uuid ?? uid()),
     name: str(r?.name ?? r?.title ?? "Projeto"),
@@ -167,21 +398,46 @@ function normalizeProject(r: any): Project {
 }
 
 function normalizeLog(r: any): SmartLog {
-  const level = (["info", "ok", "warn", "error"].includes(r?.level) ? r.level : "info") as SmartLog["level"];
-  const type = (["system", "monitor", "forge", "doctor", "connect", "voice"].includes(r?.type) ? r.type : "system") as SmartLog["type"];
+  const level = (
+    ["info", "ok", "warn", "error"].includes(r?.level) ? r.level : "info"
+  ) as SmartLog["level"];
+  const type = (
+    ["system", "monitor", "forge", "doctor", "connect", "voice"].includes(r?.type)
+      ? r.type
+      : "system"
+  ) as SmartLog["type"];
+  const meta = r?.meta && typeof r.meta === "object" ? r.meta : {};
+  const missionLog =
+    meta?.missionLog && typeof meta.missionLog === "object" ? meta.missionLog : {};
   return {
     id: str(r?.id ?? uid()),
     projectId: r?.project_id ?? r?.projectId ?? null,
+    projectName: str(r?.project_name ?? r?.projectName ?? missionLog.projectName ?? meta.projectName, ""),
+    missionName: str(r?.missionName ?? missionLog.missionName ?? meta.missionName, ""),
+    repository: str(r?.repository ?? missionLog.repository ?? meta.repository ?? meta.repositoryUrl, ""),
+    status: str(r?.status ?? missionLog.status ?? meta.status, ""),
+    action: str(r?.action ?? missionLog.action ?? meta.action, ""),
+    result: str(r?.result ?? missionLog.result ?? meta.resultSummary, ""),
+    commit: str(r?.commit ?? missionLog.commit ?? meta.commit, ""),
+    push: r?.push ?? missionLog.push ?? meta.push ?? null,
+    blocker: str(r?.blocker ?? missionLog.blocker ?? meta.blocker, ""),
+    reportId: str(r?.reportId ?? missionLog.reportId ?? meta.reportId, ""),
+    reportUrl: str(r?.reportUrl ?? missionLog.reportUrl ?? meta.reportUrl, ""),
+    summary: str(r?.summary ?? missionLog.summary ?? meta.summary, ""),
+    isMissionLog: Boolean(r?.isMissionLog ?? meta.isMissionLog ?? missionLog.reportUrl),
     type,
     level,
     message: str(r?.message ?? r?.text ?? ""),
     createdAt: str(r?.created_at ?? r?.createdAt, now()),
     source: "real",
+    metadataDetails: meta,
   };
 }
 
 function normalizeIntegration(r: any): Integration {
-  const status = (["connected", "syncing", "warning", "offline"].includes(r?.status) ? r.status : "connected") as Integration["status"];
+  const status = (
+    ["connected", "syncing", "warning", "offline"].includes(r?.status) ? r.status : "connected"
+  ) as Integration["status"];
   return {
     id: str(r?.id ?? uid()),
     name: str(r?.name ?? r?.provider ?? "Integração"),
@@ -312,12 +568,24 @@ export const factoryData = {
     const summary = state.summary as any;
     return {
       projectsConnected: num(summary?.projects_connected, projects.length),
-      projectsOnline: num(summary?.projects_online, projects.filter((p) => p.status === "online").length),
+      projectsOnline: num(
+        summary?.projects_online,
+        projects.filter((p) => p.status === "online").length,
+      ),
       corrections: num(summary?.corrections, this.getCorrections().length),
-      alertsActive: num(summary?.alerts_active, alerts.filter((a) => a.status !== "resolved").length),
-      alertsCritical: num(summary?.alerts_critical, alerts.filter((a) => a.severity === "critical").length),
+      alertsActive: num(
+        summary?.alerts_active,
+        alerts.filter((a) => a.status !== "resolved").length,
+      ),
+      alertsCritical: num(
+        summary?.alerts_critical,
+        alerts.filter((a) => a.severity === "critical").length,
+      ),
       apisConnected: num(summary?.apis_connected, integrations.length),
-      apisSyncing: num(summary?.apis_syncing, integrations.filter((i) => i.status === "syncing").length),
+      apisSyncing: num(
+        summary?.apis_syncing,
+        integrations.filter((i) => i.status === "syncing").length,
+      ),
       monitored: num(summary?.monitored, projects.length + integrations.length),
     };
   },
@@ -372,6 +640,18 @@ export const factoryData = {
       id: uid(),
       projectId: input.projectId ?? null,
       projectName: input.projectName,
+      missionName: input.missionName,
+      repository: input.repository,
+      status: input.status,
+      action: input.action,
+      result: input.result,
+      commit: input.commit,
+      push: input.push,
+      blocker: input.blocker,
+      reportId: input.reportId,
+      reportUrl: input.reportUrl,
+      summary: input.summary,
+      isMissionLog: input.isMissionLog,
       module: input.module,
       type: input.type ?? "system",
       level: input.level ?? "info",
@@ -406,7 +686,12 @@ export const factoryData = {
     };
     const list = readLS<Correction>(LS_KEYS.corrections);
     writeLS(LS_KEYS.corrections, [c, ...list]);
-    this.addLog({ projectId: c.projectId, type: "doctor", level: "ok", message: `Correção sugerida: ${c.title}` });
+    this.addLog({
+      projectId: c.projectId,
+      type: "doctor",
+      level: "ok",
+      message: `Correção sugerida: ${c.title}`,
+    });
     return c;
   },
   addCommand(input: Partial<CommandRecord> & { commandText: string }): CommandRecord {
@@ -420,7 +705,11 @@ export const factoryData = {
     };
     const list = readLS<CommandRecord>(LS_KEYS.commands);
     writeLS(LS_KEYS.commands, [cmd, ...list]);
-    this.addLog({ type: "voice", level: "info", message: `Comando registrado: ${cmd.commandText}` });
+    this.addLog({
+      type: "voice",
+      level: "info",
+      message: `Comando registrado: ${cmd.commandText}`,
+    });
     return cmd;
   },
 
@@ -504,7 +793,11 @@ export const factoryData = {
       source: inserted ? "real" : "mock",
     };
     state.missions = [m, ...state.missions];
-    this.addLog({ type: "system", level: "info", message: `Missão enviada ao núcleo IA: ${payload.title}` });
+    this.addLog({
+      type: "system",
+      level: "info",
+      message: `Missão enviada ao núcleo IA: ${payload.title}`,
+    });
     emit();
     return m;
   },
@@ -562,4 +855,3 @@ export function useFactoryData() {
     () => version,
   );
 }
-
