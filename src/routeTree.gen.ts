@@ -15,6 +15,7 @@ import { Route as AppVoiceRouteImport } from './routes/_app.voice'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
+import { Route as AppRelatorioRouteImport } from './routes/_app.relatorio'
 import { Route as AppQueueRouteImport } from './routes/_app.queue'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppPrivateRouteImport } from './routes/_app.private'
@@ -55,6 +56,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
 const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRelatorioRoute = AppRelatorioRouteImport.update({
+  id: '/relatorio',
+  path: '/relatorio',
   getParentRoute: () => AppRoute,
 } as any)
 const AppQueueRoute = AppQueueRouteImport.update({
@@ -113,9 +119,9 @@ const AppAdminRoute = AppAdminRouteImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 const AppRelatorioReportIdRoute = AppRelatorioReportIdRouteImport.update({
-  id: '/relatorio/$reportId',
-  path: '/relatorio/$reportId',
-  getParentRoute: () => AppRoute,
+  id: '/$reportId',
+  path: '/$reportId',
+  getParentRoute: () => AppRelatorioRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/relatorio': typeof AppRelatorioRouteWithChildren
   '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/relatorio': typeof AppRelatorioRouteWithChildren
   '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/_app/private': typeof AppPrivateRoute
   '/_app/projects': typeof AppProjectsRoute
   '/_app/queue': typeof AppQueueRoute
+  '/_app/relatorio': typeof AppRelatorioRouteWithChildren
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/private'
     | '/projects'
     | '/queue'
+    | '/relatorio'
     | '/relatorios'
     | '/reports'
     | '/settings'
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/private'
     | '/projects'
     | '/queue'
+    | '/relatorio'
     | '/relatorios'
     | '/reports'
     | '/settings'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/_app/private'
     | '/_app/projects'
     | '/_app/queue'
+    | '/_app/relatorio'
     | '/_app/relatorios'
     | '/_app/reports'
     | '/_app/settings'
@@ -284,6 +296,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/relatorio': {
+      id: '/_app/relatorio'
+      path: '/relatorio'
+      fullPath: '/relatorio'
+      preLoaderRoute: typeof AppRelatorioRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/queue': {
@@ -365,13 +384,25 @@ declare module '@tanstack/react-router' {
     }
     '/_app/relatorio/$reportId': {
       id: '/_app/relatorio/$reportId'
-      path: '/relatorio/$reportId'
+      path: '/$reportId'
       fullPath: '/relatorio/$reportId'
       preLoaderRoute: typeof AppRelatorioReportIdRouteImport
-      parentRoute: typeof AppRoute
+      parentRoute: typeof AppRelatorioRoute
     }
   }
 }
+
+interface AppRelatorioRouteChildren {
+  AppRelatorioReportIdRoute: typeof AppRelatorioReportIdRoute
+}
+
+const AppRelatorioRouteChildren: AppRelatorioRouteChildren = {
+  AppRelatorioReportIdRoute: AppRelatorioReportIdRoute,
+}
+
+const AppRelatorioRouteWithChildren = AppRelatorioRoute._addFileChildren(
+  AppRelatorioRouteChildren,
+)
 
 interface AppRouteChildren {
   AppAdminRoute: typeof AppAdminRoute
@@ -385,12 +416,12 @@ interface AppRouteChildren {
   AppPrivateRoute: typeof AppPrivateRoute
   AppProjectsRoute: typeof AppProjectsRoute
   AppQueueRoute: typeof AppQueueRoute
+  AppRelatorioRoute: typeof AppRelatorioRouteWithChildren
   AppRelatoriosRoute: typeof AppRelatoriosRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppVoiceRoute: typeof AppVoiceRoute
   AppIndexRoute: typeof AppIndexRoute
-  AppRelatorioReportIdRoute: typeof AppRelatorioReportIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -405,12 +436,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppPrivateRoute: AppPrivateRoute,
   AppProjectsRoute: AppProjectsRoute,
   AppQueueRoute: AppQueueRoute,
+  AppRelatorioRoute: AppRelatorioRouteWithChildren,
   AppRelatoriosRoute: AppRelatoriosRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppVoiceRoute: AppVoiceRoute,
   AppIndexRoute: AppIndexRoute,
-  AppRelatorioReportIdRoute: AppRelatorioReportIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
