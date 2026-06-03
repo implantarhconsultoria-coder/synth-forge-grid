@@ -18,14 +18,15 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install worker dependencies
-        working-directory: factory-worker
+      - name: Install dependencies
         run: npm install
 
       - name: Run AI Factory Worker
-        working-directory: factory-worker
-        run: node start-factory.mjs
+        run: npm run factory
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: implantarhconsultoria-coder/synth-forge-grid
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FACTORY_RUN_ONCE: "true"

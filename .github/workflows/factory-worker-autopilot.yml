@@ -3,7 +3,7 @@ name: AI Factory Worker Autopilot
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: write
@@ -26,14 +26,18 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run one Factory cycle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FACTORY_AUTOPILOT: 'true'
-          FACTORY_RUN_ONCE: 'true'
-        run: npm run factory:start
+          GITHUB_REPO: implantarhconsultoria-coder/synth-forge-grid
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FACTORY_AUTOPILOT: "true"
+          FACTORY_RUN_ONCE: "true"
+        run: npm run factory
 
       - name: Commit Factory state
         if: always()
