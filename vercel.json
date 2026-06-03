@@ -1,5 +1,6 @@
 {
-  "framework": "tanstack-start",
+  "framework": null,
   "buildCommand": "npm run build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
 }

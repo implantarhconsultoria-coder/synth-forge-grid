@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppVoiceRouteImport } from './routes/_app.voice'
+import { Route as AppStatusRouteImport } from './routes/_app.status'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
@@ -41,6 +42,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppVoiceRoute = AppVoiceRouteImport.update({
   id: '/voice',
   path: '/voice',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStatusRoute = AppStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/status': typeof AppStatusRoute
   '/voice': typeof AppVoiceRoute
   '/relatorio/$reportId': typeof AppRelatorioReportIdRoute
 }
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
+  '/status': typeof AppStatusRoute
   '/voice': typeof AppVoiceRoute
   '/': typeof AppIndexRoute
   '/relatorio/$reportId': typeof AppRelatorioReportIdRoute
@@ -182,6 +190,7 @@ export interface FileRoutesById {
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/status': typeof AppStatusRoute
   '/_app/voice': typeof AppVoiceRoute
   '/_app/': typeof AppIndexRoute
   '/_app/relatorio/$reportId': typeof AppRelatorioReportIdRoute
@@ -205,6 +214,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/reports'
     | '/settings'
+    | '/status'
     | '/voice'
     | '/relatorio/$reportId'
   fileRoutesByTo: FileRoutesByTo
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/reports'
     | '/settings'
+    | '/status'
     | '/voice'
     | '/'
     | '/relatorio/$reportId'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/_app/relatorios'
     | '/_app/reports'
     | '/_app/settings'
+    | '/_app/status'
     | '/_app/voice'
     | '/_app/'
     | '/_app/relatorio/$reportId'
@@ -275,6 +287,13 @@ declare module '@tanstack/react-router' {
       path: '/voice'
       fullPath: '/voice'
       preLoaderRoute: typeof AppVoiceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/status': {
+      id: '/_app/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof AppStatusRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -420,6 +439,7 @@ interface AppRouteChildren {
   AppRelatoriosRoute: typeof AppRelatoriosRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppStatusRoute: typeof AppStatusRoute
   AppVoiceRoute: typeof AppVoiceRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -440,6 +460,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRelatoriosRoute: AppRelatoriosRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppStatusRoute: AppStatusRoute,
   AppVoiceRoute: AppVoiceRoute,
   AppIndexRoute: AppIndexRoute,
 }
