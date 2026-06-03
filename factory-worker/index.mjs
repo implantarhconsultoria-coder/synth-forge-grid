@@ -136,6 +136,9 @@ const env = {
   openaiKey: process.env.OPENAI_API_KEY || "",
   githubToken: process.env.GITHUB_TOKEN || "",
   githubRepo: process.env.GITHUB_REPO || "",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
+  notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL || "",
   vapidPublicKey: process.env.FACTORY_VAPID_PUBLIC_KEY || "",
   vapidPrivateKey: process.env.FACTORY_VAPID_PRIVATE_KEY || "",
   vapidSubject: process.env.FACTORY_VAPID_SUBJECT || "mailto:suporte@implantarh.com",
@@ -552,6 +555,17 @@ function getCodexOperationalStatus() {
   };
 }
 
+function getMobileNotifyStatus() {
+  const channels = [];
+  if (env.telegramBotToken && env.telegramChatId) channels.push("telegram");
+  if (env.notifyWebhookUrl) channels.push("webhook");
+  return {
+    enabled: channels.length > 0,
+    channels,
+    missing: env.telegramBotToken && env.telegramChatId ? [] : ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+  };
+}
+
 function extractChangedFiles(task = {}, result = {}) {
   const values = [
     ...(Array.isArray(result.changedFiles) ? result.changedFiles : []),
@@ -651,8 +665,6 @@ Repositório:
 ${report.repository}
 Branch:
 ${report.branch}
-Codex conectado:
-${report.codex_connected}
 Commit:
 ${report.commit}
 Push:
@@ -663,7 +675,7 @@ ${report.deploy}
 Feito:
 ${numberedList(report.feito)}
 
-Rodando agora:
+Rodando:
 ${numberedList(report.rodando_agora)}
 
 Bloqueios:
@@ -702,6 +714,96 @@ async function saveMissionReport(report) {
     ]);
   }
   return report;
+}
+
+async function saveFinalReport(report) {
+  return saveMissionReport(report);
+}
+
+function formatMobileNotification(report) {
+  const feito = listFrom(report.feito, ["nao informado"])
+    .slice(0, 2)
+    .map((item) => `- ${item}`)
+    .join("\n");
+  const bloqueios = listFrom(report.bloqueios, ["nenhum bloqueio informado"])
+    .slice(0, 2)
+    .map((item) => `- ${item}`)
+    .join("\n");
+  const nextStep = listFrom(report.proximos_passos, ["nao informado"])[0];
+  return `AI FACTORY — MISSÃO FINALIZADA
+
+Projeto:
+${report.project}
+Status:
+${report.status}
+Feito:
+${feito}
+
+Bloqueios:
+${bloqueios}
+
+Commit:
+${report.commit}
+Próximo passo:
+${nextStep}`;
+}
+
+async function sendMobileNotification(report) {
+  const notify = getMobileNotifyStatus();
+  if (!env.telegramBotToken || !env.telegramChatId) {
+    await addLog(
+      "warn",
+      "Notificação móvel não configurada. Faltam TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.",
+      { taskId: report.taskId, reportId: report.id },
+    );
+  }
+  if (!notify.enabled) {
+    return { enabled: false, channels: [], reason: "missing_mobile_notification_config" };
+  }
+
+  const text = formatMobileNotification(report);
+  const results = [];
+
+  if (env.telegramBotToken && env.telegramChatId) {
+    try {
+      const response = await fetch(
+        `https://api.telegram.org/bot${env.telegramBotToken}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: env.telegramChatId,
+            text,
+            disable_web_page_preview: true,
+          }),
+        },
+      );
+      results.push({ channel: "telegram", ok: response.ok, status: response.status });
+    } catch (error) {
+      results.push({ channel: "telegram", ok: false, error: String(error) });
+    }
+  }
+
+  if (env.notifyWebhookUrl) {
+    try {
+      const response = await fetch(env.notifyWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, report }),
+      });
+      results.push({ channel: "webhook", ok: response.ok, status: response.status });
+    } catch (error) {
+      results.push({ channel: "webhook", ok: false, error: String(error) });
+    }
+  }
+
+  await addLog("info", "Notificação móvel processada", {
+    taskId: report.taskId,
+    reportId: report.id,
+    channels: results.map((item) => item.channel),
+    results,
+  });
+  return { enabled: true, channels: notify.channels, results };
 }
 
 function withCorsHeaders(headers = {}) {
@@ -2955,12 +3057,12 @@ async function processNext() {
       live_execution: null,
     });
 
-    await saveMissionReport(
-      buildMissionReport(task, {
-        status: "completed",
-        result,
-      }),
-    );
+    const report = buildMissionReport(task, {
+      status: "completed",
+      result,
+    });
+    await saveFinalReport(report);
+    await sendMobileNotification(report);
 
     await addLog("ok", "Tarefa concluida", {
       taskId: task.id,
@@ -2976,12 +3078,12 @@ async function processNext() {
         error: message,
         live_execution: null,
       });
-      await saveMissionReport(
-        buildMissionReport(task, {
-          status: "failed",
-          error: message,
-        }),
-      );
+      const report = buildMissionReport(task, {
+        status: "failed",
+        error: message,
+      });
+      await saveFinalReport(report);
+      await sendMobileNotification(report);
     }
     await addLog("error", "Falha no processamento", {
       error: message,
@@ -3000,6 +3102,7 @@ async function getStatusPayload() {
   const database = await getDatabaseHealth();
   const missingEnv = getMissingEnv();
   const codex = getCodexOperationalStatus();
+  const mobileNotify = getMobileNotifyStatus();
   const reports = await readJson(REPORTS_FILE, []);
   return {
     online: true,
@@ -3012,6 +3115,9 @@ async function getStatusPayload() {
     missingEnv,
     codex_status: codex.codex_status,
     reports_enabled: true,
+    mobile_notify_enabled: mobileNotify.enabled,
+    notify_channels: mobileNotify.channels,
+    mobile_notify_missing_env: mobileNotify.missing,
     counts: {
       queuePending: queue.filter((task) => isPendingStatus(task.status)).length,
       queueAwaitingApproval: queue.filter((task) => isApprovalStatus(task.status)).length,
@@ -3037,6 +3143,9 @@ async function getStatusPayload() {
       codexConnected: codex.connected,
       codexStatus: codex.codex_status,
       reportsEnabled: true,
+      mobileNotifyEnabled: mobileNotify.enabled,
+      notifyChannels: mobileNotify.channels,
+      mobileNotifyMissingEnv: mobileNotify.missing,
       missingEnv,
     },
     codex,
@@ -3122,6 +3231,12 @@ const server = http.createServer(async (req, res) => {
     });
     if (!updatedTask) return json(res, 404, { error: "tarefa nao encontrada" });
     await addLog("warn", "Tarefa rejeitada manualmente", { taskId });
+    const report = buildMissionReport(updatedTask, {
+      status: "rejected",
+      error: updatedTask.rejection_reason || "rejeitado manualmente",
+    });
+    await saveFinalReport(report);
+    await sendMobileNotification(report);
     return json(res, 200, updatedTask);
   }
 
@@ -3136,6 +3251,12 @@ const server = http.createServer(async (req, res) => {
     });
     if (!updatedTask) return json(res, 404, { error: "tarefa nao encontrada" });
     await addLog("warn", "Tarefa cancelada manualmente", { taskId });
+    const report = buildMissionReport(updatedTask, {
+      status: "cancelled",
+      error: updatedTask.cancellation_reason || "cancelado manualmente",
+    });
+    await saveFinalReport(report);
+    await sendMobileNotification(report);
     return json(res, 200, updatedTask);
   }
 
