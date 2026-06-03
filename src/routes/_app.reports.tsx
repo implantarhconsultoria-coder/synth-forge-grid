@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -94,8 +94,14 @@ function whatsappUrl(report: MissionReport) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
-function ReportsPage() {
+export function ReportsPage() {
   const settings = useFactorySettings();
+  const reportFromUrl = useRouterState({
+    select: (state) =>
+      typeof state.location.search === "object"
+        ? String((state.location.search as Record<string, unknown>).report || "")
+        : "",
+  });
   const workerBase = useMemo(
     () => resolveWorkerBase(settings.workerUrl, settings.workerPort),
     [settings.workerPort, settings.workerUrl],
@@ -105,7 +111,7 @@ function ReportsPage() {
   const [search, setSearch] = useState("");
   const [project, setProject] = useState("all");
   const [status, setStatus] = useState("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(reportFromUrl || null);
   const [loading, setLoading] = useState(true);
 
   async function loadAll() {
@@ -122,7 +128,7 @@ function ReportsPage() {
         : [];
       setReports(Array.isArray(nextReports) ? nextReports : []);
       setNotifications(Array.isArray(nextNotifications) ? nextNotifications : []);
-      setSelectedId((current) => current || nextReports?.[0]?.id || null);
+      setSelectedId((current) => current || reportFromUrl || nextReports?.[0]?.id || null);
     } catch (error) {
       toast.error("Nao foi possivel carregar a Central de Relatorios.");
       console.error("[reports] load error:", error);
@@ -133,7 +139,11 @@ function ReportsPage() {
 
   useEffect(() => {
     void loadAll();
-  }, [workerBase]);
+  }, [reportFromUrl, workerBase]);
+
+  useEffect(() => {
+    if (reportFromUrl) setSelectedId(reportFromUrl);
+  }, [reportFromUrl]);
 
   const projects = useMemo(() => {
     return Array.from(new Set(reports.map((item) => item.project || "nao informado"))).sort();

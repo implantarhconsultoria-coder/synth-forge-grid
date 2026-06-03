@@ -14,14 +14,19 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppVoiceRouteImport } from './routes/_app.voice'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppReportsRouteImport } from './routes/_app.reports'
+import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
 import { Route as AppQueueRouteImport } from './routes/_app.queue'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppPrivateRouteImport } from './routes/_app.private'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
+import { Route as AppNotificacoesRouteImport } from './routes/_app.notificacoes'
+import { Route as AppMissaoRouteImport } from './routes/_app.missao'
 import { Route as AppLogsRouteImport } from './routes/_app.logs'
 import { Route as AppForgeRouteImport } from './routes/_app.forge'
 import { Route as AppDoctorRouteImport } from './routes/_app.doctor'
 import { Route as AppConnectRouteImport } from './routes/_app.connect'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
+import { Route as AppRelatorioReportIdRouteImport } from './routes/_app.relatorio.$reportId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -47,6 +52,11 @@ const AppReportsRoute = AppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppQueueRoute = AppQueueRouteImport.update({
   id: '/queue',
   path: '/queue',
@@ -60,6 +70,21 @@ const AppProjectsRoute = AppProjectsRouteImport.update({
 const AppPrivateRoute = AppPrivateRouteImport.update({
   id: '/private',
   path: '/private',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificacoesRoute = AppNotificacoesRouteImport.update({
+  id: '/notificacoes',
+  path: '/notificacoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMissaoRoute = AppMissaoRouteImport.update({
+  id: '/missao',
+  path: '/missao',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLogsRoute = AppLogsRouteImport.update({
@@ -87,6 +112,11 @@ const AppAdminRoute = AppAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRelatorioReportIdRoute = AppRelatorioReportIdRouteImport.update({
+  id: '/relatorio/$reportId',
+  path: '/relatorio/$reportId',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -95,12 +125,17 @@ export interface FileRoutesByFullPath {
   '/doctor': typeof AppDoctorRoute
   '/forge': typeof AppForgeRoute
   '/logs': typeof AppLogsRoute
+  '/missao': typeof AppMissaoRoute
+  '/notificacoes': typeof AppNotificacoesRoute
+  '/notifications': typeof AppNotificationsRoute
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/voice': typeof AppVoiceRoute
+  '/relatorio/$reportId': typeof AppRelatorioReportIdRoute
 }
 export interface FileRoutesByTo {
   '/admin': typeof AppAdminRoute
@@ -108,13 +143,18 @@ export interface FileRoutesByTo {
   '/doctor': typeof AppDoctorRoute
   '/forge': typeof AppForgeRoute
   '/logs': typeof AppLogsRoute
+  '/missao': typeof AppMissaoRoute
+  '/notificacoes': typeof AppNotificacoesRoute
+  '/notifications': typeof AppNotificationsRoute
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/relatorios': typeof AppRelatoriosRoute
   '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/voice': typeof AppVoiceRoute
   '/': typeof AppIndexRoute
+  '/relatorio/$reportId': typeof AppRelatorioReportIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -124,13 +164,18 @@ export interface FileRoutesById {
   '/_app/doctor': typeof AppDoctorRoute
   '/_app/forge': typeof AppForgeRoute
   '/_app/logs': typeof AppLogsRoute
+  '/_app/missao': typeof AppMissaoRoute
+  '/_app/notificacoes': typeof AppNotificacoesRoute
+  '/_app/notifications': typeof AppNotificationsRoute
   '/_app/private': typeof AppPrivateRoute
   '/_app/projects': typeof AppProjectsRoute
   '/_app/queue': typeof AppQueueRoute
+  '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/voice': typeof AppVoiceRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/relatorio/$reportId': typeof AppRelatorioReportIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -141,12 +186,17 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/forge'
     | '/logs'
+    | '/missao'
+    | '/notificacoes'
+    | '/notifications'
     | '/private'
     | '/projects'
     | '/queue'
+    | '/relatorios'
     | '/reports'
     | '/settings'
     | '/voice'
+    | '/relatorio/$reportId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/admin'
@@ -154,13 +204,18 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/forge'
     | '/logs'
+    | '/missao'
+    | '/notificacoes'
+    | '/notifications'
     | '/private'
     | '/projects'
     | '/queue'
+    | '/relatorios'
     | '/reports'
     | '/settings'
     | '/voice'
     | '/'
+    | '/relatorio/$reportId'
   id:
     | '__root__'
     | '/_app'
@@ -169,13 +224,18 @@ export interface FileRouteTypes {
     | '/_app/doctor'
     | '/_app/forge'
     | '/_app/logs'
+    | '/_app/missao'
+    | '/_app/notificacoes'
+    | '/_app/notifications'
     | '/_app/private'
     | '/_app/projects'
     | '/_app/queue'
+    | '/_app/relatorios'
     | '/_app/reports'
     | '/_app/settings'
     | '/_app/voice'
     | '/_app/'
+    | '/_app/relatorio/$reportId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -219,6 +279,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/relatorios': {
+      id: '/_app/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/queue': {
       id: '/_app/queue'
       path: '/queue'
@@ -238,6 +305,27 @@ declare module '@tanstack/react-router' {
       path: '/private'
       fullPath: '/private'
       preLoaderRoute: typeof AppPrivateRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notificacoes': {
+      id: '/_app/notificacoes'
+      path: '/notificacoes'
+      fullPath: '/notificacoes'
+      preLoaderRoute: typeof AppNotificacoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/missao': {
+      id: '/_app/missao'
+      path: '/missao'
+      fullPath: '/missao'
+      preLoaderRoute: typeof AppMissaoRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/logs': {
@@ -275,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/relatorio/$reportId': {
+      id: '/_app/relatorio/$reportId'
+      path: '/relatorio/$reportId'
+      fullPath: '/relatorio/$reportId'
+      preLoaderRoute: typeof AppRelatorioReportIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -284,13 +379,18 @@ interface AppRouteChildren {
   AppDoctorRoute: typeof AppDoctorRoute
   AppForgeRoute: typeof AppForgeRoute
   AppLogsRoute: typeof AppLogsRoute
+  AppMissaoRoute: typeof AppMissaoRoute
+  AppNotificacoesRoute: typeof AppNotificacoesRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
   AppPrivateRoute: typeof AppPrivateRoute
   AppProjectsRoute: typeof AppProjectsRoute
   AppQueueRoute: typeof AppQueueRoute
+  AppRelatoriosRoute: typeof AppRelatoriosRoute
   AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppVoiceRoute: typeof AppVoiceRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppRelatorioReportIdRoute: typeof AppRelatorioReportIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -299,13 +399,18 @@ const AppRouteChildren: AppRouteChildren = {
   AppDoctorRoute: AppDoctorRoute,
   AppForgeRoute: AppForgeRoute,
   AppLogsRoute: AppLogsRoute,
+  AppMissaoRoute: AppMissaoRoute,
+  AppNotificacoesRoute: AppNotificacoesRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
   AppPrivateRoute: AppPrivateRoute,
   AppProjectsRoute: AppProjectsRoute,
   AppQueueRoute: AppQueueRoute,
+  AppRelatoriosRoute: AppRelatoriosRoute,
   AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppVoiceRoute: AppVoiceRoute,
   AppIndexRoute: AppIndexRoute,
+  AppRelatorioReportIdRoute: AppRelatorioReportIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

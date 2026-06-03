@@ -1,12 +1,5 @@
 {
+  "framework": "tanstack-start",
   "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "framework": "vite",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+  "installCommand": "npm install"
 }
