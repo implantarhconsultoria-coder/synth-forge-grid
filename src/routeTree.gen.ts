@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppVoiceRouteImport } from './routes/_app.voice'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppQueueRouteImport } from './routes/_app.queue'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppPrivateRouteImport } from './routes/_app.private'
@@ -39,6 +40,11 @@ const AppVoiceRoute = AppVoiceRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
 const AppQueueRoute = AppQueueRouteImport.update({
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/voice': typeof AppVoiceRoute
 }
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/private': typeof AppPrivateRoute
   '/projects': typeof AppProjectsRoute
   '/queue': typeof AppQueueRoute
+  '/reports': typeof AppReportsRoute
   '/settings': typeof AppSettingsRoute
   '/voice': typeof AppVoiceRoute
   '/': typeof AppIndexRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/_app/private': typeof AppPrivateRoute
   '/_app/projects': typeof AppProjectsRoute
   '/_app/queue': typeof AppQueueRoute
+  '/_app/reports': typeof AppReportsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/voice': typeof AppVoiceRoute
   '/_app/': typeof AppIndexRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/private'
     | '/projects'
     | '/queue'
+    | '/reports'
     | '/settings'
     | '/voice'
   fileRoutesByTo: FileRoutesByTo
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/private'
     | '/projects'
     | '/queue'
+    | '/reports'
     | '/settings'
     | '/voice'
     | '/'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/_app/private'
     | '/_app/projects'
     | '/_app/queue'
+    | '/_app/reports'
     | '/_app/settings'
     | '/_app/voice'
     | '/_app/'
@@ -198,6 +210,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/queue': {
@@ -268,6 +287,7 @@ interface AppRouteChildren {
   AppPrivateRoute: typeof AppPrivateRoute
   AppProjectsRoute: typeof AppProjectsRoute
   AppQueueRoute: typeof AppQueueRoute
+  AppReportsRoute: typeof AppReportsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppVoiceRoute: typeof AppVoiceRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -282,6 +302,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPrivateRoute: AppPrivateRoute,
   AppProjectsRoute: AppProjectsRoute,
   AppQueueRoute: AppQueueRoute,
+  AppReportsRoute: AppReportsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppVoiceRoute: AppVoiceRoute,
   AppIndexRoute: AppIndexRoute,
@@ -295,3 +316,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

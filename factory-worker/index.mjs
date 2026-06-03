@@ -1,7 +1,9 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import net from "node:net";
 import path from "node:path";
+import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
@@ -26,6 +28,7 @@ const AUTOPILOT_FILE = path.join(DATA_DIR, "autopilot.json");
 const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push-subscriptions.json");
 const VAPID_FILE = path.join(DATA_DIR, "vapid-keys.json");
 const REPORTS_FILE = path.join(DATA_DIR, "factory-reports.json");
+const NOTIFICATIONS_FILE = path.join(DATA_DIR, "factory-notifications.json");
 
 function loadEnvFile(filePath, { override = false } = {}) {
   if (!fsSync.existsSync(filePath)) return;
@@ -136,9 +139,18 @@ const env = {
   openaiKey: process.env.OPENAI_API_KEY || "",
   githubToken: process.env.GITHUB_TOKEN || "",
   githubRepo: process.env.GITHUB_REPO || "",
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
-  notifyWebhookUrl: process.env.NOTIFY_WEBHOOK_URL || "",
+  emailNotifyTo: process.env.EMAIL_NOTIFY_TO || process.env.NOTIFY_EMAIL_TO || "",
+  emailNotifyFrom:
+    process.env.EMAIL_NOTIFY_FROM ||
+    process.env.SMTP_FROM ||
+    process.env.SMTP_USER ||
+    "AI Factory <ai-factory@localhost>",
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: Number(process.env.SMTP_PORT || 587),
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPass: process.env.SMTP_PASS || "",
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  factoryPublicUrl: process.env.FACTORY_PUBLIC_URL || "",
   vapidPublicKey: process.env.FACTORY_VAPID_PUBLIC_KEY || "",
   vapidPrivateKey: process.env.FACTORY_VAPID_PRIVATE_KEY || "",
   vapidSubject: process.env.FACTORY_VAPID_SUBJECT || "mailto:suporte@implantarh.com",
@@ -306,6 +318,7 @@ async function ensureFiles() {
     [AUTOPILOT_FILE, DEFAULT_AUTOPILOT_STATE],
     [PUSH_SUBSCRIPTIONS_FILE, []],
     [REPORTS_FILE, []],
+    [NOTIFICATIONS_FILE, []],
   ];
 
   for (const [file, seed] of seeds) {
@@ -555,14 +568,16 @@ function getCodexOperationalStatus() {
   };
 }
 
-function getMobileNotifyStatus() {
+function getExternalNotifyStatus() {
   const channels = [];
-  if (env.telegramBotToken && env.telegramChatId) channels.push("telegram");
-  if (env.notifyWebhookUrl) channels.push("webhook");
+  if (env.emailNotifyTo && env.smtpHost) channels.push("email");
+  const missing = [];
+  if (!env.emailNotifyTo) missing.push("EMAIL_NOTIFY_TO");
+  if (!env.smtpHost) missing.push("SMTP_HOST");
   return {
     enabled: channels.length > 0,
     channels,
-    missing: env.telegramBotToken && env.telegramChatId ? [] : ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"],
+    missing,
   };
 }
 
@@ -576,6 +591,12 @@ function extractChangedFiles(task = {}, result = {}) {
     ...(Array.isArray(task.payload?.changedFiles) ? task.payload.changedFiles : []),
   ];
   return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function reportUrl(reportId) {
+  const pathOnly = `/reports?report=${encodeURIComponent(reportId)}`;
+  if (!env.factoryPublicUrl) return pathOnly;
+  return `${env.factoryPublicUrl.replace(/\/+$/, "")}${pathOnly}`;
 }
 
 function buildMissionReport(task, { status, result = null, error = null } = {}) {
@@ -601,6 +622,7 @@ function buildMissionReport(task, { status, result = null, error = null } = {}) 
     ? ["aguardando Codex"]
     : listFrom(reportResult.runningNow || payload.runningNow, ["nada em execucao informado"]);
 
+  const commits = listFrom(reportResult.commits || payload.commits || commit, commit ? [commit] : ["nao"]);
   const report = {
     id: crypto.randomUUID(),
     taskId: task?.id || null,
@@ -628,13 +650,19 @@ function buildMissionReport(task, { status, result = null, error = null } = {}) 
       recordsCommitPush: codex.recordsCommitPush,
       executed: reportResult.codexExecuted || payload.codexExecuted || "nao informado",
     },
+    mission: task?.title || task?.command || task?.type || "nao informado",
+    missionCommand: task?.command || payload.command || "nao informado",
     commit: commit || "nao",
+    commits,
     push,
     deploy,
     feito: listFrom(reportResult.done || payload.done, [
       error ? "missao nao concluida" : "missao executada pela Factory",
     ]),
     rodando_agora: runningNow,
+    pendente: listFrom(reportResult.pending || payload.pending, [
+      error ? "resolver bloqueio antes de concluir" : "nada pendente informado",
+    ]),
     bloqueios: blocked,
     arquivos_alterados: changedFiles.length > 0 ? changedFiles : ["nenhum arquivo informado"],
     proximos_passos: listFrom(reportResult.nextSteps || payload.nextSteps, [
@@ -646,6 +674,7 @@ function buildMissionReport(task, { status, result = null, error = null } = {}) 
         : "Execucao Codex em modo manual_bridge.",
     ]),
   };
+  report.reportUrl = reportUrl(report.id);
   report.text = formatMissionReportText(report);
   return report;
 }
@@ -717,93 +746,245 @@ async function saveMissionReport(report) {
 }
 
 async function saveFinalReport(report) {
-  return saveMissionReport(report);
+  const saved = await saveMissionReport(report);
+  await createInternalNotification(saved);
+  return saved;
 }
 
-function formatMobileNotification(report) {
-  const feito = listFrom(report.feito, ["nao informado"])
-    .slice(0, 2)
-    .map((item) => `- ${item}`)
-    .join("\n");
-  const bloqueios = listFrom(report.bloqueios, ["nenhum bloqueio informado"])
-    .slice(0, 2)
-    .map((item) => `- ${item}`)
-    .join("\n");
-  const nextStep = listFrom(report.proximos_passos, ["nao informado"])[0];
-  return `AI FACTORY — MISSÃO FINALIZADA
+function reportSummary(report) {
+  return listFrom(report.feito, ["sem resumo informado"]).slice(0, 2).join("; ");
+}
 
-Projeto:
+async function createInternalNotification(report) {
+  const notifications = await readJson(NOTIFICATIONS_FILE, []);
+  const list = Array.isArray(notifications) ? notifications : [];
+  const notification = {
+    id: crypto.randomUUID(),
+    reportId: report.id,
+    taskId: report.taskId,
+    createdAt: nowIso(),
+    read: false,
+    title: "AI Factory - Missão Finalizada",
+    project: report.project,
+    status: report.status,
+    summary: reportSummary(report),
+    reportUrl: report.reportUrl,
+  };
+  list.unshift(notification);
+  await writeJson(NOTIFICATIONS_FILE, list.slice(0, 500));
+  await addLog("info", "Notificação interna criada", {
+    notificationId: notification.id,
+    reportId: report.id,
+    taskId: report.taskId,
+  });
+  return notification;
+}
+
+function formatEmailNotification(report) {
+  const blockers = listFrom(report.bloqueios, ["nenhum bloqueio informado"]).join("\n");
+  const nextStep = listFrom(report.proximos_passos, ["nao informado"])[0];
+  return `Projeto:
 ${report.project}
+
 Status:
 ${report.status}
-Feito:
-${feito}
 
-Bloqueios:
-${bloqueios}
+Resumo:
+${reportSummary(report)}
 
 Commit:
 ${report.commit}
+
+Bloqueios:
+${blockers}
+
 Próximo passo:
-${nextStep}`;
+${nextStep}
+
+Relatório completo:
+${report.reportUrl}`;
 }
 
-async function sendMobileNotification(report) {
-  const notify = getMobileNotifyStatus();
-  if (!env.telegramBotToken || !env.telegramChatId) {
-    await addLog(
-      "warn",
-      "Notificação móvel não configurada. Faltam TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID.",
-      { taskId: report.taskId, reportId: report.id },
-    );
-  }
-  if (!notify.enabled) {
-    return { enabled: false, channels: [], reason: "missing_mobile_notification_config" };
-  }
-
-  const text = formatMobileNotification(report);
-  const results = [];
-
-  if (env.telegramBotToken && env.telegramChatId) {
-    try {
-      const response = await fetch(
-        `https://api.telegram.org/bot${env.telegramBotToken}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: env.telegramChatId,
-            text,
-            disable_web_page_preview: true,
-          }),
-        },
-      );
-      results.push({ channel: "telegram", ok: response.ok, status: response.status });
-    } catch (error) {
-      results.push({ channel: "telegram", ok: false, error: String(error) });
-    }
-  }
-
-  if (env.notifyWebhookUrl) {
-    try {
-      const response = await fetch(env.notifyWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, report }),
-      });
-      results.push({ channel: "webhook", ok: response.ok, status: response.status });
-    } catch (error) {
-      results.push({ channel: "webhook", ok: false, error: String(error) });
-    }
-  }
-
-  await addLog("info", "Notificação móvel processada", {
-    taskId: report.taskId,
-    reportId: report.id,
-    channels: results.map((item) => item.channel),
-    results,
+function smtpRead(socket) {
+  return new Promise((resolve, reject) => {
+    let buffer = "";
+    const onData = (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split(/\r?\n/).filter(Boolean);
+      const last = lines.at(-1) || "";
+      if (/^\d{3}\s/.test(last)) {
+        socket.off("data", onData);
+        resolve(buffer);
+      }
+    };
+    socket.on("data", onData);
+    socket.once("error", reject);
   });
-  return { enabled: true, channels: notify.channels, results };
+}
+
+async function smtpCommand(socket, command, expected = /^[23]/) {
+  if (command) socket.write(`${command}\r\n`);
+  const response = await smtpRead(socket);
+  if (!expected.test(String(response))) {
+    throw new Error(`SMTP falhou em ${command || "greeting"}: ${String(response).trim()}`);
+  }
+  return response;
+}
+
+function connectSmtp() {
+  return new Promise((resolve, reject) => {
+    const socket = env.smtpSecure
+      ? tls.connect(env.smtpPort, env.smtpHost, () => resolve(socket))
+      : net.connect(env.smtpPort, env.smtpHost, () => resolve(socket));
+    socket.once("error", reject);
+    socket.setTimeout(15000, () => {
+      socket.destroy(new Error("SMTP timeout"));
+    });
+  });
+}
+
+async function sendSmtpMail({ to, from, subject, text }) {
+  let socket = await connectSmtp();
+  try {
+    await smtpCommand(socket, null);
+    await smtpCommand(socket, `EHLO ai-factory.local`);
+
+    if (!env.smtpSecure && env.smtpPort === 587) {
+      await smtpCommand(socket, "STARTTLS");
+      socket = tls.connect({ socket, servername: env.smtpHost });
+      await smtpCommand(socket, `EHLO ai-factory.local`);
+    }
+
+    if (env.smtpUser && env.smtpPass) {
+      await smtpCommand(socket, "AUTH LOGIN", /^334/);
+      await smtpCommand(socket, Buffer.from(env.smtpUser).toString("base64"), /^334/);
+      await smtpCommand(socket, Buffer.from(env.smtpPass).toString("base64"));
+    }
+
+    const fromAddress = String(from).match(/<([^>]+)>/)?.[1] || from;
+    await smtpCommand(socket, `MAIL FROM:<${fromAddress}>`);
+    await smtpCommand(socket, `RCPT TO:<${to}>`);
+    await smtpCommand(socket, "DATA", /^354/);
+    const message = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      "Content-Type: text/plain; charset=UTF-8",
+      "",
+      text,
+      ".",
+      "",
+    ].join("\r\n");
+    await smtpCommand(socket, message);
+    await smtpCommand(socket, "QUIT", /^[23]/);
+  } finally {
+    socket.end();
+  }
+}
+
+async function sendEmailNotification(report) {
+  const notify = getExternalNotifyStatus();
+  if (!notify.enabled) {
+    await addLog("warn", "Notificação externa por e-mail não configurada.", {
+      taskId: report.taskId,
+      reportId: report.id,
+      missing: notify.missing,
+    });
+    return { enabled: false, channel: "email", sent: false, missing: notify.missing };
+  }
+
+  const subject = "AI Factory - Missão Finalizada";
+  const text = formatEmailNotification(report);
+  try {
+    await sendSmtpMail({
+      to: env.emailNotifyTo,
+      from: env.emailNotifyFrom,
+      subject,
+      text,
+    });
+    await addLog("ok", "E-mail de notificação externa enviado", {
+      taskId: report.taskId,
+      reportId: report.id,
+      to: env.emailNotifyTo,
+    });
+    return { enabled: true, channel: "email", sent: true, to: env.emailNotifyTo };
+  } catch (error) {
+    await addLog("error", "Falha ao enviar e-mail de notificação externa", {
+      taskId: report.taskId,
+      reportId: report.id,
+      error: String(error),
+    });
+    return { enabled: true, channel: "email", sent: false, error: String(error) };
+  }
+}
+
+async function sendExternalNotification(report) {
+  return sendEmailNotification(report);
+}
+
+function escapePdfText(value = "") {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E\n\r\t]/g, "-")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function buildReportPdf(report) {
+  const lines = [
+    "RELATORIO FINAL DA MISSAO",
+    "",
+    `Projeto: ${report.project}`,
+    `Repositorio: ${report.repository}`,
+    `Branch: ${report.branch}`,
+    `Status: ${report.status}`,
+    `Data/Hora: ${report.createdAt}`,
+    `Missao: ${report.mission}`,
+    `Commit: ${report.commit}`,
+    `Push: ${report.push}`,
+    `Deploy: ${report.deploy}`,
+    "",
+    "Feito:",
+    ...listFrom(report.feito).map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "Rodando:",
+    ...listFrom(report.rodando_agora).map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "Bloqueios:",
+    ...listFrom(report.bloqueios).map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "Arquivos alterados:",
+    ...listFrom(report.arquivos_alterados).map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "Proximos passos:",
+    ...listFrom(report.proximos_passos).map((item, index) => `${index + 1}. ${item}`),
+  ];
+  const textOps = lines
+    .slice(0, 45)
+    .map((line, index) => `BT /F1 10 Tf 48 ${790 - index * 16} Td (${escapePdfText(line)}) Tj ET`)
+    .join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(textOps, "utf8")} >>\nstream\n${textOps}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, "utf8"));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, "utf8");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, "utf8");
 }
 
 function withCorsHeaders(headers = {}) {
@@ -819,6 +1000,11 @@ function withCorsHeaders(headers = {}) {
 function json(res, status, payload) {
   res.writeHead(status, withCorsHeaders());
   res.end(JSON.stringify(payload));
+}
+
+function binary(res, status, buffer, headers = {}) {
+  res.writeHead(status, withCorsHeaders(headers));
+  res.end(buffer);
 }
 
 function escapeHtml(value = "") {
@@ -1128,7 +1314,7 @@ function statusHtml(payload, details = {}) {
                 .map(
                   (task) => `<div class="project">
                     <strong>${escapeHtml(task.title)}</strong>
-                    <div class="muted">${escapeHtml(task.projectName)} · ${escapeHtml(formatStatusDate(task.createdAt))}</div>
+                    <div class="muted">${escapeHtml(task.projectName)} - ${escapeHtml(formatStatusDate(task.createdAt))}</div>
                     <div class="pills" style="margin-top: 8px;">
                       <span class="pill warn">${escapeHtml(task.priority)}</span>
                       <form method="post" action="/fila/${escapeHtml(task.id)}/aprovar"><button class="pill ok" type="submit">aprovar</button></form>
@@ -3062,7 +3248,7 @@ async function processNext() {
       result,
     });
     await saveFinalReport(report);
-    await sendMobileNotification(report);
+    await sendExternalNotification(report);
 
     await addLog("ok", "Tarefa concluida", {
       taskId: task.id,
@@ -3083,7 +3269,7 @@ async function processNext() {
         error: message,
       });
       await saveFinalReport(report);
-      await sendMobileNotification(report);
+      await sendExternalNotification(report);
     }
     await addLog("error", "Falha no processamento", {
       error: message,
@@ -3102,8 +3288,10 @@ async function getStatusPayload() {
   const database = await getDatabaseHealth();
   const missingEnv = getMissingEnv();
   const codex = getCodexOperationalStatus();
-  const mobileNotify = getMobileNotifyStatus();
+  const externalNotify = getExternalNotifyStatus();
   const reports = await readJson(REPORTS_FILE, []);
+  const notifications = await readJson(NOTIFICATIONS_FILE, []);
+  const notificationList = Array.isArray(notifications) ? notifications : [];
   return {
     online: true,
     processing,
@@ -3115,9 +3303,10 @@ async function getStatusPayload() {
     missingEnv,
     codex_status: codex.codex_status,
     reports_enabled: true,
-    mobile_notify_enabled: mobileNotify.enabled,
-    notify_channels: mobileNotify.channels,
-    mobile_notify_missing_env: mobileNotify.missing,
+    external_notify_enabled: externalNotify.enabled,
+    email_notify_enabled: externalNotify.channels.includes("email"),
+    notify_channels: externalNotify.channels,
+    notify_missing_env: externalNotify.missing,
     counts: {
       queuePending: queue.filter((task) => isPendingStatus(task.status)).length,
       queueAwaitingApproval: queue.filter((task) => isApprovalStatus(task.status)).length,
@@ -3127,6 +3316,8 @@ async function getStatusPayload() {
       projectsTotal: projects.length,
       pushSubscriptions: subscriptions.length,
       reports: Array.isArray(reports) ? reports.length : 0,
+      notifications: notificationList.length,
+      notificationsUnread: notificationList.filter((item) => item.read !== true).length,
     },
     autopilot: autopilotState,
     integrations: {
@@ -3143,9 +3334,10 @@ async function getStatusPayload() {
       codexConnected: codex.connected,
       codexStatus: codex.codex_status,
       reportsEnabled: true,
-      mobileNotifyEnabled: mobileNotify.enabled,
-      notifyChannels: mobileNotify.channels,
-      mobileNotifyMissingEnv: mobileNotify.missing,
+      externalNotifyEnabled: externalNotify.enabled,
+      emailNotifyEnabled: externalNotify.channels.includes("email"),
+      notifyChannels: externalNotify.channels,
+      notifyMissingEnv: externalNotify.missing,
       missingEnv,
     },
     codex,
@@ -3236,7 +3428,7 @@ const server = http.createServer(async (req, res) => {
       error: updatedTask.rejection_reason || "rejeitado manualmente",
     });
     await saveFinalReport(report);
-    await sendMobileNotification(report);
+    await sendExternalNotification(report);
     return json(res, 200, updatedTask);
   }
 
@@ -3256,7 +3448,7 @@ const server = http.createServer(async (req, res) => {
       error: updatedTask.cancellation_reason || "cancelado manualmente",
     });
     await saveFinalReport(report);
-    await sendMobileNotification(report);
+    await sendExternalNotification(report);
     return json(res, 200, updatedTask);
   }
 
@@ -3417,7 +3609,66 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/relatorios") {
     const reports = await readJson(REPORTS_FILE, []);
-    return json(res, 200, Array.isArray(reports) ? reports : []);
+    const list = Array.isArray(reports) ? reports : [];
+    const search = String(url.searchParams.get("search") || "").toLowerCase();
+    const project = String(url.searchParams.get("project") || "");
+    const status = String(url.searchParams.get("status") || "");
+    const filtered = list.filter((report) => {
+      const matchesSearch =
+        !search ||
+        JSON.stringify([report.mission, report.project, report.repository, report.status])
+          .toLowerCase()
+          .includes(search);
+      const matchesProject = !project || report.project === project;
+      const matchesStatus = !status || report.status === status;
+      return matchesSearch && matchesProject && matchesStatus;
+    });
+    return json(res, 200, filtered);
+  }
+
+  if (req.method === "GET" && /^\/relatorio\/[^/]+$/.test(url.pathname)) {
+    const reportId = decodeURIComponent(url.pathname.split("/")[2]);
+    const reports = await readJson(REPORTS_FILE, []);
+    const report = Array.isArray(reports) ? reports.find((item) => item.id === reportId) : null;
+    if (!report) return json(res, 404, { error: "relatorio nao encontrado" });
+    return json(res, 200, report);
+  }
+
+  if (req.method === "GET" && /^\/relatorio\/[^/]+\/pdf$/.test(url.pathname)) {
+    const reportId = decodeURIComponent(url.pathname.split("/")[2]);
+    const reports = await readJson(REPORTS_FILE, []);
+    const report = Array.isArray(reports) ? reports.find((item) => item.id === reportId) : null;
+    if (!report) return json(res, 404, { error: "relatorio nao encontrado" });
+    return binary(res, 200, buildReportPdf(report), {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="ai-factory-relatorio-${reportId}.pdf"`,
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/notificacoes") {
+    const notifications = await readJson(NOTIFICATIONS_FILE, []);
+    return json(res, 200, Array.isArray(notifications) ? notifications : []);
+  }
+
+  if (req.method === "POST" && /^\/notificacoes\/[^/]+\/lida$/.test(url.pathname)) {
+    const notificationId = decodeURIComponent(url.pathname.split("/")[2]);
+    const notifications = await readJson(NOTIFICATIONS_FILE, []);
+    const list = Array.isArray(notifications) ? notifications : [];
+    const updated = list.map((item) =>
+      item.id === notificationId ? { ...item, read: true, readAt: nowIso() } : item,
+    );
+    await writeJson(NOTIFICATIONS_FILE, updated);
+    return json(res, 200, { ok: true });
+  }
+
+  if (req.method === "POST" && url.pathname === "/notificacoes/lidas") {
+    const notifications = await readJson(NOTIFICATIONS_FILE, []);
+    const list = Array.isArray(notifications) ? notifications : [];
+    await writeJson(
+      NOTIFICATIONS_FILE,
+      list.map((item) => ({ ...item, read: true, readAt: item.readAt || nowIso() })),
+    );
+    return json(res, 200, { ok: true });
   }
 
   if (req.method === "GET" && url.pathname === "/logs") {
