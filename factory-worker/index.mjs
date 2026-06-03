@@ -25,6 +25,7 @@ const PROJECTS_FILE = path.join(DATA_DIR, "connected-projects.json");
 const AUTOPILOT_FILE = path.join(DATA_DIR, "autopilot.json");
 const PUSH_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push-subscriptions.json");
 const VAPID_FILE = path.join(DATA_DIR, "vapid-keys.json");
+const REPORTS_FILE = path.join(DATA_DIR, "factory-reports.json");
 
 function loadEnvFile(filePath, { override = false } = {}) {
   if (!fsSync.existsSync(filePath)) return;
@@ -301,6 +302,7 @@ async function ensureFiles() {
     [PROJECTS_FILE, DEFAULT_PROJECTS],
     [AUTOPILOT_FILE, DEFAULT_AUTOPILOT_STATE],
     [PUSH_SUBSCRIPTIONS_FILE, []],
+    [REPORTS_FILE, []],
   ];
 
   for (const [file, seed] of seeds) {
@@ -513,6 +515,193 @@ async function addLog(level, message, extra = {}) {
       }),
     ]);
   }
+}
+
+function listFrom(value, fallback = ["nao informado"]) {
+  if (Array.isArray(value)) {
+    const clean = value.map((item) => String(item || "").trim()).filter(Boolean);
+    return clean.length > 0 ? clean : fallback;
+  }
+  if (value) return [String(value)];
+  return fallback;
+}
+
+function getCodexOperationalStatus() {
+  const explicit = String(process.env.CODEX_STATUS || "").trim().toLowerCase();
+  const allowed = new Set(["not_connected", "connected", "manual_bridge", "unknown"]);
+  const status = allowed.has(explicit)
+    ? explicit
+    : process.env.CODEX_CONNECTED === "true" || process.env.CODEX_API_URL
+      ? "connected"
+      : "manual_bridge";
+  const connected = status === "connected";
+  const manualBridge = status === "manual_bridge";
+  return {
+    codex_status: status,
+    connected,
+    connectedLabel: connected ? "SIM" : "NAO",
+    mode: connected ? "connected" : manualBridge ? "manual_bridge" : status,
+    sendsMission: connected
+      ? "Factory envia missao para a integracao Codex configurada."
+      : "Factory gera missao estruturada para execucao manual pelo Codex.",
+    receivesReturn: connected
+      ? "Factory espera retorno da integracao Codex e registra resultado na fila."
+      : "Codex executa no ambiente compartilhado e a Factory registra o retorno no relatorio final.",
+    recordsCommitPush:
+      "Commit, push e deploy sao gravados no relatorio final quando informados pelo executor ou detectados no resultado.",
+  };
+}
+
+function extractChangedFiles(task = {}, result = {}) {
+  const values = [
+    ...(Array.isArray(result.changedFiles) ? result.changedFiles : []),
+    ...(Array.isArray(result.writtenFiles) ? result.writtenFiles : []),
+    ...(Array.isArray(result.applied) ? result.applied : []),
+    ...(Array.isArray(result.execution?.writtenFiles) ? result.execution.writtenFiles : []),
+    ...(Array.isArray(task.changedFiles) ? task.changedFiles : []),
+    ...(Array.isArray(task.payload?.changedFiles) ? task.payload.changedFiles : []),
+  ];
+  return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+function buildMissionReport(task, { status, result = null, error = null } = {}) {
+  const codex = getCodexOperationalStatus();
+  const payload = task?.payload && typeof task.payload === "object" ? task.payload : {};
+  const reportResult = result && typeof result === "object" ? result : {};
+  const commit = reportResult.commit || payload.commit || task.commit || null;
+  const push =
+    reportResult.push ??
+    payload.push ??
+    task.push ??
+    (commit ? "nao informado" : "nao");
+  const deploy =
+    reportResult.deploy ??
+    payload.deploy ??
+    task.deploy ??
+    "nao";
+  const changedFiles = extractChangedFiles(task, reportResult);
+  const blocked = error
+    ? [String(error)]
+    : listFrom(reportResult.blockers || payload.blockers, ["nenhum bloqueio informado"]);
+  const runningNow = reportResult.awaitingCodex
+    ? ["aguardando Codex"]
+    : listFrom(reportResult.runningNow || payload.runningNow, ["nada em execucao informado"]);
+
+  const report = {
+    id: crypto.randomUUID(),
+    taskId: task?.id || null,
+    createdAt: nowIso(),
+    title: "RELATÓRIO FINAL DA MISSÃO",
+    status: status || normalizeTaskStatus(task?.status),
+    project: task?.projectName || task?.projectId || payload.projectName || "nao informado",
+    repository:
+      task?.repository ||
+      task?.repositoryUrl ||
+      payload.repository ||
+      payload.repositoryUrl ||
+      env.githubRepo ||
+      "nao informado",
+    branch: task?.branch || payload.branch || process.env.GITHUB_REF_NAME || "nao informado",
+    codex_connected: codex.connectedLabel,
+    codex_status: codex.codex_status,
+    codex_mode: codex.mode,
+    codex: {
+      connected: codex.connected,
+      status: codex.codex_status,
+      mode: codex.mode,
+      sendsMission: codex.sendsMission,
+      receivesReturn: codex.receivesReturn,
+      recordsCommitPush: codex.recordsCommitPush,
+      executed: reportResult.codexExecuted || payload.codexExecuted || "nao informado",
+    },
+    commit: commit || "nao",
+    push,
+    deploy,
+    feito: listFrom(reportResult.done || payload.done, [
+      error ? "missao nao concluida" : "missao executada pela Factory",
+    ]),
+    rodando_agora: runningNow,
+    bloqueios: blocked,
+    arquivos_alterados: changedFiles.length > 0 ? changedFiles : ["nenhum arquivo informado"],
+    proximos_passos: listFrom(reportResult.nextSteps || payload.nextSteps, [
+      error ? "corrigir bloqueio informado" : "aguardar nova missao ou validacao humana",
+    ]),
+    observacoes: listFrom(reportResult.notes || payload.notes, [
+      codex.connected
+        ? "Codex conectado conforme status operacional."
+        : "Execucao Codex em modo manual_bridge.",
+    ]),
+  };
+  report.text = formatMissionReportText(report);
+  return report;
+}
+
+function numberedList(items = []) {
+  return listFrom(items).map((item, index) => `${index + 1}. ${item}`).join("\n");
+}
+
+function formatMissionReportText(report) {
+  return `RELATÓRIO FINAL DA MISSÃO
+
+Status:
+${report.status}
+Projeto:
+${report.project}
+Repositório:
+${report.repository}
+Branch:
+${report.branch}
+Codex conectado:
+${report.codex_connected}
+Commit:
+${report.commit}
+Push:
+${report.push}
+Deploy:
+${report.deploy}
+
+Feito:
+${numberedList(report.feito)}
+
+Rodando agora:
+${numberedList(report.rodando_agora)}
+
+Bloqueios:
+${numberedList(report.bloqueios)}
+
+Arquivos alterados:
+${numberedList(report.arquivos_alterados)}
+
+Próximos passos:
+${numberedList(report.proximos_passos)}
+
+Observações:
+${numberedList(report.observacoes)}`;
+}
+
+async function saveMissionReport(report) {
+  const reports = await readJson(REPORTS_FILE, []);
+  const nextReports = Array.isArray(reports) ? reports : [];
+  nextReports.unshift(report);
+  await writeJson(REPORTS_FILE, nextReports.slice(0, 500));
+  await addLog("info", "Relatorio final da missao registrado", {
+    taskId: report.taskId,
+    reportId: report.id,
+    codex_status: report.codex_status,
+    status: report.status,
+  });
+  if (supabase) {
+    await Promise.allSettled([
+      supabase.from("smart_logs").insert({
+        level: "info",
+        message: "Relatorio final da missao",
+        module: "factory-worker",
+        project_name: report.project,
+        meta: report,
+      }),
+    ]);
+  }
+  return report;
 }
 
 function withCorsHeaders(headers = {}) {
@@ -2681,6 +2870,29 @@ async function createGithubIssueComment(task) {
 }
 
 async function executeTask(task) {
+  if (task.type === "codex_manual_bridge" || task.type === "factory_report_test") {
+    return {
+      kind: task.type,
+      codex_status: "manual_bridge",
+      awaitingCodex: task.type === "codex_manual_bridge",
+      done: [
+        task.type === "codex_manual_bridge"
+          ? "missao estruturada para execucao manual pelo Codex"
+          : "missao teste finalizada pela Factory",
+      ],
+      runningNow:
+        task.type === "codex_manual_bridge" ? ["aguardando Codex"] : ["nada em execucao"],
+      blockers:
+        task.type === "codex_manual_bridge"
+          ? ["aguardando Codex executar a missao pela ponte manual"]
+          : ["nenhum bloqueio"],
+      nextSteps:
+        task.type === "codex_manual_bridge"
+          ? ["registrar retorno do Codex no relatorio final"]
+          : ["validar endpoints /relatorio e /relatorios"],
+      notes: ["Codex operando por manual_bridge quando nao ha conexao automatica real."],
+    };
+  }
   if (task.type === "project_bootstrap") return executeProjectBootstrap(task);
   if (task.type === "project_audit") return executeProjectAudit(task);
   if (task.type === "project_fix") return executeProjectFix(task);
@@ -2743,6 +2955,13 @@ async function processNext() {
       live_execution: null,
     });
 
+    await saveMissionReport(
+      buildMissionReport(task, {
+        status: "completed",
+        result,
+      }),
+    );
+
     await addLog("ok", "Tarefa concluida", {
       taskId: task.id,
       type: task.type,
@@ -2757,6 +2976,12 @@ async function processNext() {
         error: message,
         live_execution: null,
       });
+      await saveMissionReport(
+        buildMissionReport(task, {
+          status: "failed",
+          error: message,
+        }),
+      );
     }
     await addLog("error", "Falha no processamento", {
       error: message,
@@ -2774,6 +2999,8 @@ async function getStatusPayload() {
   const subscriptions = await loadPushSubscriptions();
   const database = await getDatabaseHealth();
   const missingEnv = getMissingEnv();
+  const codex = getCodexOperationalStatus();
+  const reports = await readJson(REPORTS_FILE, []);
   return {
     online: true,
     processing,
@@ -2781,7 +3008,10 @@ async function getStatusPayload() {
     pollMs: POLL_MS,
     queueFile: QUEUE_FILE,
     logFile: LOG_FILE,
+    reportsFile: REPORTS_FILE,
     missingEnv,
+    codex_status: codex.codex_status,
+    reports_enabled: true,
     counts: {
       queuePending: queue.filter((task) => isPendingStatus(task.status)).length,
       queueAwaitingApproval: queue.filter((task) => isApprovalStatus(task.status)).length,
@@ -2790,6 +3020,7 @@ async function getStatusPayload() {
       projectsEnabled: projects.filter((project) => project.enabled !== false).length,
       projectsTotal: projects.length,
       pushSubscriptions: subscriptions.length,
+      reports: Array.isArray(reports) ? reports.length : 0,
     },
     autopilot: autopilotState,
     integrations: {
@@ -2803,8 +3034,12 @@ async function getStatusPayload() {
       openaiLastError: openaiRuntimeState.lastError,
       github: Boolean(env.githubToken),
       githubRepo: Boolean(env.githubRepo),
+      codexConnected: codex.connected,
+      codexStatus: codex.codex_status,
+      reportsEnabled: true,
       missingEnv,
     },
+    codex,
     database,
     capabilities: {
       createProject: true,
@@ -3050,6 +3285,18 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       return json(res, 400, { error: `falha ao forcar resolucao: ${String(error)}` });
     }
+  }
+
+  if (req.method === "GET" && url.pathname === "/relatorio") {
+    const reports = await readJson(REPORTS_FILE, []);
+    const latest = Array.isArray(reports) && reports.length > 0 ? reports[0] : null;
+    if (!latest) return json(res, 404, { error: "nenhum relatorio registrado" });
+    return json(res, 200, latest);
+  }
+
+  if (req.method === "GET" && url.pathname === "/relatorios") {
+    const reports = await readJson(REPORTS_FILE, []);
+    return json(res, 200, Array.isArray(reports) ? reports : []);
   }
 
   if (req.method === "GET" && url.pathname === "/logs") {
